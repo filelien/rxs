@@ -1,0 +1,16 @@
+[Unit]
+Description=Raxus Monitoring Agent
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=raxus-agent
+ExecStart=/usr/bin/python3 /opt/raxus-agent/raxus_agent.py --config /etc/raxus/agent.yaml
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

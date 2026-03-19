@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: "raxus-api"
+    static_configs:
+      - targets: ["raxus-api:8000"]
+    metrics_path: /monitoring/metrics/prometheus
+
+  - job_name: "raxus-agents"
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/agents/*.json
+        refresh_interval: 30s

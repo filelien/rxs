@@ -1,0 +1,39 @@
+# ─── Web framework ────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# ─── Database drivers ────────────────────────────────────────
+motor==3.6.0              # MongoDB async
+pymongo==4.9.1
+oracledb==2.4.1           # Oracle thin mode
+aiomysql==0.2.0           # MySQL async
+asyncpg==0.29.0           # PostgreSQL async
+redis[hiredis]==5.1.0
+
+# ─── Auth & Security ─────────────────────────────────────────
+PyJWT==2.9.0
+cryptography==43.0.1      # Fernet encryption
+passlib[bcrypt]==1.7.4
+
+# ─── SQL parsing ─────────────────────────────────────────────
+sqlglot==25.0.0
+
+# ─── Monitoring ──────────────────────────────────────────────
+prometheus-client==0.21.0
+
+# ─── LLM ─────────────────────────────────────────────────────
+anthropic==0.36.0
+httpx==0.27.2
+
+# ─── Logging ─────────────────────────────────────────────────
+structlog==24.4.0
+
+# ─── Task scheduling ─────────────────────────────────────────
+arq==0.26.1
+croniter==3.0.3
+
+# ─── Utils ───────────────────────────────────────────────────
+python-multipart==0.0.12
+python-dotenv==1.0.1

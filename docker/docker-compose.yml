@@ -1,0 +1,162 @@
+version: "3.9"
+
+networks:
+  raxus-internal:
+    driver: bridge
+  raxus-public:
+    driver: bridge
+
+volumes:
+  mysql_app_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+services:
+
+  # ─── MySQL Applicatif (base Raxus) ────────────────────────
+  mysql-app:
+    image: mysql:8.0
+    container_name: raxus-mysql-app
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${APP_DB_NAME:-raxus_app}
+      MYSQL_USER: ${APP_DB_USER:-raxus}
+      MYSQL_PASSWORD: ${APP_DB_PASSWORD:-change-me}
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_app_data:/var/lib/mysql
+      - ../backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks:
+      - raxus-internal
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "${APP_DB_USER:-raxus}", "-p${APP_DB_PASSWORD:-change-me}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ─── Redis ────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: raxus-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:-change-me}
+    volumes:
+      - redis_data:/data
+    networks:
+      - raxus-internal
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-change-me}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ─── Backend FastAPI ──────────────────────────────────────
+  raxus-api:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.backend
+    container_name: raxus-api
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      APP_DB_HOST: mysql-app
+      APP_DB_PORT: "3306"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-change-me}@redis:6379/0"
+      APP_CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql-app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - raxus-internal
+      - raxus-public
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # ─── Frontend React (dev) ─────────────────────────────────
+  raxus-frontend:
+    image: node:20-alpine
+    container_name: raxus-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_GRAFANA_URL: http://localhost:3001
+      VITE_PROMETHEUS_URL: http://localhost:9090
+      VITE_AIRFLOW_URL: http://localhost:8080
+    ports:
+      - "5173:5173"
+    networks:
+      - raxus-public
+    depends_on:
+      raxus-api:
+        condition: service_healthy
+
+  # ─── Prometheus ───────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: raxus-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    networks:
+      - raxus-internal
+      - raxus-public
+    ports:
+      - "9090:9090"
+
+  # ─── Grafana ─────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: raxus-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-raxus-grafana}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - raxus-internal
+      - raxus-public
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
