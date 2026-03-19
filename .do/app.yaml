@@ -1,0 +1,78 @@
+name: raxus-app
+services:
+- name: api
+  source_dir: backend
+  github:
+    repo: filelien/rxs
+    branch: main
+    deploy_on_push: true
+  run_command: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 2
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  envs:
+  - key: APP_ENV
+    value: production
+  - key: APP_SECRET_KEY
+    type: SECRET
+    value: ${app-secret-key}
+  - key: APP_DB_HOST
+    value: ${db-host}
+  - key: APP_DB_PORT
+    value: "3306"
+  - key: APP_DB_USER
+    value: ${db-user}
+  - key: APP_DB_PASSWORD
+    type: SECRET
+    value: ${db-password}
+  - key: APP_DB_NAME
+    value: ${db-name}
+  - key: REDIS_URL
+    value: ${redis-url}
+  - key: CREDENTIALS_ENCRYPTION_KEY
+    type: SECRET
+    value: ${encryption-key}
+  - key: ANTHROPIC_API_KEY
+    type: SECRET
+    value: ${anthropic-api-key}
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 30
+    period_seconds: 10
+    timeout_seconds: 5
+    failure_threshold: 3
+
+- name: frontend
+  source_dir: frontend
+  github:
+    repo: filelien/rxs
+    branch: main
+    deploy_on_push: true
+  build_command: npm run build
+  static_site_generator:
+    github_actions_build: true
+  github_actions_build:
+    build_command: npm run build
+    output_dir: dist
+  routes:
+  - path: /
+  - path: /_next/static
+    headers:
+      cache_control: public,max-age=31536000,immutable
+  catchall_document: index.html
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+
+databases:
+- name: mysql-app
+  engine: MYSQL
+  version: "8"
+  size: db-s-1vcpu-1gb
+  num_nodes: 1
+
+- name: redis
+  engine: REDIS
+  version: "7"
+  size: db-s-1vcpu-1gb
+  num_nodes: 1
